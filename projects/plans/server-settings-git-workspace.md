@@ -1,84 +1,88 @@
-# Server Settings, Workspaces & Git Integration
+# Workspace rollout
 
-Move browser settings to server, rework workspace creation as git worktrees, and add VSCode-like git/GitHub integration to OpenCode Web.
-
----
-
-## Goal
-
-1. Move browser/local settings persistence to server-side persistence
-2. Change workspace creation so new workspaces are git worktrees created one level above project root with a naming prompt (e.g. `/srv/appdata/dev/humlebi__workspacename`)
-3. Add VSCode-like git/GitHub integration in OpenCode Web (history, commit, push/sync, merge/rebase, PR creation)
+Phase server settings and git-powered workflows
 
 ---
 
-## Key decisions to lock first
+## Use plan
 
-- **Workspace naming format** — use `<repoFolder>__<promptSlug>` exactly, with collision suffixes (`-2`, `-3`, etc.)
-- **Scope of "server-side settings"** — all current local persisted state including transient UI state
-- **GitHub auth model** — reuse local GitHub CLI (`gh`) with server passthrough, or add OAuth/token storage in OpenCode server?
-
----
-
-## Discoveries
-
-### Monorepo layout
-
-| Area                     | Package             |
-| ------------------------ | ------------------- |
-| Backend / API            | `packages/opencode` |
-| Web app UI               | `packages/app`      |
-| Docs site                | `packages/web`      |
-| SDK / OpenAPI generation | `packages/sdk/js`   |
-| UI theme system          | `packages/ui`       |
-
-### OpenAPI generation chain
-
-- Routes defined in `packages/opencode/src/server/server.ts` (`Server.openapi()`)
-- Spec output by `packages/opencode/src/cli/cmd/generate.ts`
-- SDK build pulls OpenAPI via `bun dev generate` in `packages/sdk/js/script/build.ts`
-
-### Existing server config endpoints
-
-- Global config: `/global/config` in `packages/opencode/src/server/routes/global.ts`
-- Per-instance config: `/config` in `packages/opencode/src/server/routes/config.ts`
-
-### Workspace / worktree state
-
-- Control-plane workspace API: `packages/opencode/src/server/routes/workspace.ts`
-- Experimental worktree API: `packages/opencode/src/server/routes/experimental.ts` (`/experimental/worktree*`)
-- Core worktree logic: `packages/opencode/src/worktree/index.ts`
-- Current worktree location is under app data, **not** near project root — `Worktree.makeWorktreeInfo()` uses `path.join(Global.Path.data, "worktree", Instance.project.id)`
-- Names are auto-generated (`adjective-noun`), optional name slugged, branch `opencode/<name>`
-
-### App persistence (localStorage)
-
-- Central utility: `packages/app/src/utils/persist.ts`
-- Settings: `packages/app/src/context/settings.tsx` (`persisted("settings.v3", ...)`)
-- Server list, projects, layout, language, keybinds all use `Persist.global/workspace/session`
-- Additional direct localStorage usage in `packages/app/src/entry.tsx`, `packages/ui/src/theme/context.tsx`, and `packages/app/public/oc-theme-preload.js`
-- Desktop app already has async storage abstraction (Tauri store) in `packages/desktop/src/index.tsx`
-
-### Git API coverage (current)
-
-- Available now: `project.initGit`, `vcs.get` (branch), `file.status` (changed files)
-- Missing: log/history, add/reset/stage, commit, push/pull/sync, merge/rebase, PR CRUD
-- No dedicated git panel in the app UI yet — only scattered git-aware behavior
+- [ ] Pick one unchecked todo before each work session
+- [ ] Stay inside the current phase until every `Done when` item is checked
+- [ ] Split any item that grows beyond one focused session before starting it
+- [ ] Update this file at the end of each session with checked boxes and short handoff notes when needed
+- [ ] Do not skip ahead when blocked; add a follow-up checkbox in the active phase instead
 
 ---
 
-## Deployment
+## Track phases
 
-The official setup for OpenCode Web is through a Docker Compose file. The current approach requires a custom multi-stage build that layers OpenCode onto a base image (e.g. Playwright) and manually copies musl libs. This works but is fragile and limits composability.
+- [ ] Phase 0 - Lock decisions
+- [ ] Phase 1 - Move settings to the server
+- [ ] Phase 2 - Create workspaces as git worktrees
+- [ ] Phase 3 - Add core git APIs
+- [ ] Phase 4 - Add GitHub PR integration
+- [ ] Phase 5 - Ship source control UI
+- [ ] Phase 6 - Improve deployment images
+- [ ] Phase 7 - Finish docs, migration, and hardening
 
-### Current pain points
+Current state:
 
-- Users must build a custom image to get tools like Playwright, Vitest, or other test runners
-- Alpine/musl binaries need manual lib copying (`ld-musl`, `libstdc++`, `libgcc_s`) into Debian-based images
-- Git safe directory config, user setup, and `doas` shim are boilerplate repeated per deployment
-- No first-party image that bundles common dev tooling out of the box
+- Recon is complete across settings, workspaces, git, GitHub, and deployment
+- No code has been modified yet
+- No builds, migrations, or tests have been run yet
 
-### Reference docker-compose.yml
+---
+
+## Keep notes handy
+
+- **Monorepo areas**
+
+  | Area                     | Package             |
+  | ------------------------ | ------------------- |
+  | Backend / API            | `packages/opencode` |
+  | Web app UI               | `packages/app`      |
+  | Docs site                | `packages/web`      |
+  | SDK / OpenAPI generation | `packages/sdk/js`   |
+  | UI theme system          | `packages/ui`       |
+
+- **OpenAPI and SDK flow**
+  - Routes are defined in `packages/opencode/src/server/server.ts` through `Server.openapi()`
+  - The spec is generated by `packages/opencode/src/cli/cmd/generate.ts`
+  - The JS SDK build pulls OpenAPI through `bun dev generate` in `packages/sdk/js/script/build.ts`
+
+- **Existing config endpoints**
+  - Global config lives at `/global/config` in `packages/opencode/src/server/routes/global.ts`
+  - Per-instance config lives at `/config` in `packages/opencode/src/server/routes/config.ts`
+
+- **Workspace state today**
+  - Control-plane workspace APIs live in `packages/opencode/src/server/routes/workspace.ts`
+  - Experimental worktree APIs live in `packages/opencode/src/server/routes/experimental.ts`
+  - Core worktree logic lives in `packages/opencode/src/worktree/index.ts`
+  - Current worktrees are created under app data, not beside the project root
+  - Names are auto-generated today, optional names are slugged, and the branch default is `opencode/<name>`
+
+- **App persistence today**
+  - Shared persistence helpers live in `packages/app/src/utils/persist.ts`
+  - Settings use `persisted("settings.v3", ...)` in `packages/app/src/context/settings.tsx`
+  - Server list, projects, layout, language, and keybinds use `Persist.global`, `Persist.workspace`, or `Persist.session`
+  - Direct `localStorage` usage also exists in `packages/app/src/entry.tsx`, `packages/ui/src/theme/context.tsx`, and `packages/app/public/oc-theme-preload.js`
+  - Desktop already uses an async storage abstraction in `packages/desktop/src/index.tsx`
+
+- **Git coverage today**
+  - Existing coverage includes `project.initGit`, `vcs.get`, and `file.status`
+  - Missing coverage includes history, stage or reset flows, commit, sync, merge or rebase, and PR flows
+  - The app still has no dedicated source control panel
+
+- **Deployment pain points**
+  - Web deployment relies on a custom multi-stage image to layer OpenCode onto another base image
+  - Alpine and musl binaries require manual copying into Debian-based images today
+  - Git safe directory setup, user setup, and the `doas` shim are repeated in each deployment
+  - There is no first-party full image with common dev tooling preinstalled
+  - Make sure playwright can run e2e tests for all browser types (chromium, firefox, safari). 
+  - Notice that playwright was not necesarily in a working state in the reference docker-compose.yml
+
+<details>
+<summary>Reference docker-compose.yml</summary>
 
 ```yaml
 services:
@@ -112,7 +116,7 @@ services:
 
         RUN cat >/usr/local/bin/doas <<'SCRIPT'
         #!/bin/sh
-        exec "$$@"
+        exec "$@"
         SCRIPT
         RUN chmod +x /usr/local/bin/doas
 
@@ -150,78 +154,348 @@ services:
     mem_limit: 8g
 ```
 
-### Improvements to pursue
-
-- **Publish a Debian-based "full" image** alongside the current Alpine image so musl lib copying is unnecessary. This image should include git, ripgrep, fd, curl, jq, and common build tools pre-installed.
-- **Add optional tool layers** (Playwright, Vitest/Node test runners) as official companion images or documented build stages, eliminating the need for users to hand-roll multi-stage builds.
-- **Ship a reference `docker-compose.yml`** in the repo under `docker/` with sensible defaults for volume mounts, XDG env vars, git safe directory config, user/group setup, and the `doas` shim.
-- **Support `OPENCODE_CONFIG_CONTENT` env var** as a first-class config injection path so headless/server deployments don't need a mounted config file.
-- **Document container resource limits** (shm_size, pids_limit, mem_limit) with recommended values for different workload sizes.
+</details>
 
 ---
 
-## Implementation plan
+## Phase 0 - Lock decisions
 
-### Phase 1 — Server-backed settings
+Start when:
 
-- Add a canonical server settings contract (global + per-project/workspace namespaces)
-- Expose OpenAPI endpoints for read/write/patch (versioned payload, validation, migration hooks)
-- Regenerate SDK and switch app settings to SDK calls
-- Replace `persisted(... localStorage ...)` in `packages/app` with server sync store
-- One-time migration: read localStorage, upload to server, stop writing locally
-- Preserve theme preload UX via server-bootstrapped theme data (or minimal local cache for first paint)
+- [ ] Notes above still match the repo
 
-### Phase 2 — Workspace creation as git worktrees
+Done when:
 
-- Update worktree creation so target base dir is parent of project root (not `Global.Path.data/worktree/...`)
-- Add prompt step in app for worktree name — slugify, validate, show final path preview
-- Create worktree at `<projectParent>/<repoName>__<name>`
-- Keep branch strategy (`opencode/<name>`) unless changed
-- Handle conflicts: existing dir, existing branch, detached/dirty repo, friendly remediation
-- Update workspace APIs and experimental routes to return new absolute path + metadata
-- Add/adjust tests in `packages/opencode` and app e2e
+- [ ] Workspace naming is locked
+- [ ] Server settings scope is locked
+- [ ] GitHub auth model is locked
+- [ ] Branch naming default is locked
+- [ ] Rejected alternatives are written down here
 
-### Phase 3 — Git core APIs
+Todo:
 
-Introduce backend VCS routes (OpenAPI first) for:
-
-- Status (staged / unstaged / untracked / conflicted)
-- Stage / unstage / discard (file-level first, hunk-level later)
-- Commit (message + optional amend)
-- Fetch / pull / push / sync
-- Branch create / switch / delete
-- History / log + commit details + file diff
-
-Keep implementation in `project/vcs.ts` + `util/git.ts` with a thin route layer. Normalize error model (auth, merge conflict, non-fast-forward, no upstream) for predictable UI handling. Regenerate SDK and wire app data layer.
-
-### Phase 4 — GitHub PR integration
-
-- Add server endpoints wrapping `gh` for auth status, repo remotes/default base, PR create/list/open, optional checks/status
-- Add "Publish branch / Create PR" flow in app, integrated with branch/upstream state
-- Show actionable auth/setup hints when `gh` is missing or not logged in
-
-### Phase 5 — Source control UI
-
-Build a dedicated SCM panel in the app:
-
-- Grouped file changes (staged / unstaged / untracked)
-- Quick actions (stage, unstage, discard)
-- Commit box + commit action
-- Sync / push / pull with status badges
-- Branch indicator + switch / create
-
-Add a history view (commit list, details, changed files, per-file diff). Integrate merge/rebase UX as guided commands with clear conflict states. Add PR prompt after push when branch is ahead and no PR exists.
-
-### Phase 6 — Docs, migration & hardening
-
-- Update docs that describe local browser persistence
-- Add migration notes: what moved server-side, fallback behavior, reset/recovery commands
-- Add logging for settings sync errors and git command failures
-- Verify: web + desktop parity, multi-project isolation, offline handling, OpenAPI/SDK compat
+- [ ] Confirm the workspace naming format as `<repoFolder>__<promptSlug>`
+- [ ] Confirm collision handling with `-2`, `-3`, and later suffixes
+- [ ] Confirm whether server-backed settings include all current local persisted state, including transient UI state
+- [ ] Confirm whether theme first paint should use server bootstrap only or keep a minimal local cache
+- [ ] Confirm whether GitHub auth should reuse local `gh` through the server or move to stored OAuth or token state
+- [ ] Confirm whether new worktrees should keep the branch default `opencode/<name>`
+- [ ] Write the final answers and rejected alternatives into this phase before starting Phase 1
 
 ---
 
-## Relevant files
+## Phase 1 - Move settings to the server
+
+Start when:
+
+- [ ] Phase 0 is complete
+
+Done when:
+
+- [ ] A versioned server settings contract exists
+- [ ] OpenAPI and SDK support the new settings routes
+- [ ] App settings read and write through a server sync layer
+- [ ] Existing local data migrates once and stops writing to old keys
+- [ ] Theme preload behavior still avoids a bad first paint
+- [ ] Tests cover storage, migration, and bootstrap behavior
+
+Focus files:
+
+- `packages/opencode/src/server/server.ts`
+- `packages/opencode/src/server/routes/global.ts`
+- `packages/opencode/src/server/routes/config.ts`
+- `packages/opencode/src/config/config.ts`
+- `packages/opencode/src/cli/cmd/generate.ts`
+- `packages/sdk/js/script/build.ts`
+- `packages/sdk/openapi.json`
+- `packages/app/src/utils/persist.ts`
+- `packages/app/src/context/settings.tsx`
+- `packages/app/src/context/platform.tsx`
+- `packages/app/src/context/server.tsx`
+- `packages/app/src/context/global-sync.tsx`
+- `packages/app/src/context/global-sync/bootstrap.ts`
+- `packages/app/src/context/global-sdk.tsx`
+- `packages/app/src/context/sdk.tsx`
+- `packages/app/src/utils/server.ts`
+- `packages/app/src/entry.tsx`
+- `packages/ui/src/theme/context.tsx`
+- `packages/app/public/oc-theme-preload.js`
+- `packages/desktop/src/index.tsx`
+
+Todo:
+
+- [ ] Inventory every persisted key in `packages/app`, `packages/ui`, and desktop, then map each one to global, project, workspace, or session scope
+- [ ] Define a canonical versioned payload for server-backed settings, including validation rules and migration metadata
+- [ ] Decide whether settings live behind existing config routes or a new route namespace, then document that choice in code comments or route docs
+- [ ] Add read, write, and patch endpoints in the server route layer
+- [ ] Expose the new routes through `Server.openapi()` and the generate command
+- [ ] Regenerate OpenAPI and the JS SDK
+- [ ] Add or adapt the app-side sync store that will replace direct browser persistence
+- [ ] Move settings contexts to the new server sync layer first
+- [ ] Migrate layout, language, keybinds, project lists, and other persisted app state after settings land
+- [ ] Replace direct `localStorage` reads in app bootstrap and theme preload paths
+- [ ] Add a one-time migration that reads old local values, uploads them, and marks the migration complete
+- [ ] Decide how desktop reuses the same contract or a compatibility shim, then record that choice before leaving this phase
+- [ ] Add backend, app, and e2e coverage for settings reads, writes, migration, and first-paint theme behavior
+- [ ] Record reset and recovery behavior for the docs phase
+
+---
+
+## Phase 2 - Create workspaces as git worktrees
+
+Start when:
+
+- [ ] Phase 1 is complete
+
+Done when:
+
+- [ ] New workspaces are created beside the project root
+- [ ] Naming is deterministic and collision-safe
+- [ ] The app prompts for a name and shows the final path before creation
+- [ ] Workspace APIs return the new path and metadata
+- [ ] Conflict states have clear remediation
+- [ ] Backend and e2e coverage cover the new flow
+
+Focus files:
+
+- `packages/opencode/src/server/routes/workspace.ts`
+- `packages/opencode/src/server/routes/experimental.ts`
+- `packages/opencode/src/worktree/index.ts`
+- `packages/opencode/src/control-plane/workspace.ts`
+- `packages/opencode/src/control-plane/adaptors/worktree.ts`
+- `packages/opencode/src/project/project.ts`
+- `packages/opencode/src/project/vcs.ts`
+- `packages/opencode/src/util/git.ts`
+- `packages/app/src/components/session/session-new-view.tsx`
+- `packages/app/src/components/dialog-fork.tsx`
+- `packages/app/src/components/prompt-input/submit.ts`
+- `packages/app/src/pages/layout.tsx`
+- `packages/app/src/pages/session.tsx`
+- `packages/app/e2e/projects/workspace-new-session.spec.ts`
+- `packages/opencode/test/project/worktree-remove.test.ts`
+
+Todo:
+
+- [ ] Change worktree path creation so it uses the parent of the project root instead of `Global.Path.data`
+- [ ] Build the final path as `<projectParent>/<repoFolder>__<promptSlug>`
+- [ ] Implement slugging and validation for the prompted workspace name
+- [ ] Add collision handling with `-2`, `-3`, and later suffixes
+- [ ] Keep or explicitly change the branch strategy for `opencode/<name>`
+- [ ] Detect existing directory, existing branch, dirty repo, detached HEAD, and missing git state before creation
+- [ ] Return friendly remediation messages for each blocked state
+- [ ] Update control-plane and experimental workspace APIs to return the new absolute path and worktree metadata
+- [ ] Update app flows to prompt for a name and preview the final path before creation
+- [ ] Decide how older app-data workspaces are displayed, migrated, or left alone, then write that down here
+- [ ] Add backend coverage for naming, path selection, and conflict handling
+- [ ] Add e2e coverage for the new workspace creation flow
+
+---
+
+## Phase 3 - Add core git APIs
+
+Start when:
+
+- [ ] Phase 2 is complete
+
+Done when:
+
+- [ ] Backend APIs cover status, staging, commit, sync, branches, and history
+- [ ] Route handlers stay thin and shared git logic lives in project or util layers
+- [ ] Error responses are normalized for UI use
+- [ ] OpenAPI and SDK include the new VCS surface
+- [ ] Backend tests cover success and failure paths
+
+Focus files:
+
+- `packages/opencode/src/server/server.ts`
+- `packages/opencode/src/server/routes/project.ts`
+- `packages/opencode/src/server/routes/file.ts`
+- `packages/opencode/src/project/vcs.ts`
+- `packages/opencode/src/util/git.ts`
+- `packages/opencode/src/cli/cmd/generate.ts`
+- `packages/sdk/js/script/build.ts`
+- `packages/sdk/js/src/v2/client.ts`
+- `packages/sdk/js/src/v2/gen/sdk.gen.ts`
+- `packages/sdk/js/src/v2/gen/types.gen.ts`
+- `packages/app/src/context/sdk.tsx`
+- `packages/app/src/context/global-sdk.tsx`
+
+Todo:
+
+- [ ] Define the normalized error model for auth failures, merge conflicts, non-fast-forward pushes, missing upstream, and unsupported repo states
+- [ ] Add status endpoints that return staged, unstaged, untracked, and conflicted files
+- [ ] Add file-level stage, unstage, and discard endpoints
+- [ ] Explicitly defer hunk-level actions until file-level flows are stable
+- [ ] Add commit support with message handling and any allowed options
+- [ ] Add fetch, pull, push, and sync endpoints with clear result states
+- [ ] Add branch create, switch, and delete endpoints
+- [ ] Add history, commit detail, and file diff endpoints
+- [ ] Keep route handlers thin and move shared git behavior into `project/vcs.ts` and `util/git.ts`
+- [ ] Regenerate OpenAPI and the JS SDK
+- [ ] Wire the app data layer to the new VCS surface without building the full source control panel yet
+- [ ] Add backend coverage for command behavior and error mapping
+
+---
+
+## Phase 4 - Add GitHub PR integration
+
+Start when:
+
+- [ ] Phase 3 is complete
+- [ ] The Phase 0 GitHub auth decision is still valid
+
+Done when:
+
+- [ ] The server can report `gh` availability and auth status
+- [ ] The server can create, list, and open PRs
+- [ ] The app can publish a branch and start PR creation from current repo state
+- [ ] Missing auth or missing `gh` surfaces as actionable guidance
+- [ ] Tests cover the main failure modes
+
+Focus files:
+
+- `packages/opencode/src/server/server.ts`
+- `packages/opencode/src/server/routes/project.ts`
+- `packages/opencode/src/project/vcs.ts`
+- `packages/opencode/src/util/git.ts`
+- `packages/sdk/js/script/build.ts`
+- `packages/app/src/components/status-popover.tsx`
+- `packages/app/src/components/session/session-header.tsx`
+- `packages/app/src/pages/session/session-side-panel.tsx`
+- `packages/web/src/content/docs/github.mdx`
+
+Todo:
+
+- [ ] Add endpoints that report whether `gh` is installed and whether the current user is authenticated
+- [ ] Add endpoints for repo remotes, detected default base branch, branch publish state, and upstream status
+- [ ] Add PR create, list, and open endpoints
+- [ ] Decide whether checks or status data should land in this phase or remain a follow-up item, then write that choice here
+- [ ] Normalize missing `gh`, missing auth, missing remote, and unsupported repo states into actionable responses
+- [ ] Connect Phase 3 branch and upstream state to a publish branch flow in the app
+- [ ] Add a create PR flow that starts from the current branch and selected base branch
+- [ ] Add tests around common failure modes and auth guidance
+- [ ] Record container and runtime requirements for `gh` so Phase 6 can include them
+
+---
+
+## Phase 5 - Ship source control UI
+
+Start when:
+
+- [ ] Phase 3 is complete
+- [ ] Phase 4 has the minimum PR endpoints needed by the UI
+
+Done when:
+
+- [ ] The app has a dedicated source control panel
+- [ ] Users can stage, unstage, discard, commit, sync, and switch branches from the UI
+- [ ] Users can inspect commit history and diffs
+- [ ] Merge and rebase states are guided instead of opaque
+- [ ] The app can offer PR creation after push when appropriate
+- [ ] E2E coverage covers the main happy paths and key failure paths
+
+Focus files:
+
+- `packages/app/src/pages/layout.tsx`
+- `packages/app/src/pages/layout/helpers.ts`
+- `packages/app/src/pages/session.tsx`
+- `packages/app/src/pages/session/session-side-panel.tsx`
+- `packages/app/src/components/session/session-header.tsx`
+- `packages/app/src/components/status-popover.tsx`
+- `packages/app/src/components/dialog-settings.tsx`
+- `packages/app/e2e/fixtures.ts`
+- `packages/app/e2e/actions.ts`
+
+Todo:
+
+- [ ] Decide where the source control panel and history views fit in the existing layout, then record that placement here
+- [ ] Add grouped file change lists for staged, unstaged, untracked, and conflicted files
+- [ ] Add quick actions for stage, unstage, and discard
+- [ ] Add a commit input and commit action wired to the Phase 3 API
+- [ ] Add sync, push, and pull controls with ahead, behind, and conflict status
+- [ ] Add branch display plus create and switch actions
+- [ ] Add a history view with commit list, commit detail, changed files, and per-file diffs
+- [ ] Add guided merge and rebase UX with explicit conflict states
+- [ ] Add a post-push PR prompt when the branch is ahead and no PR exists
+- [ ] Add e2e coverage for primary git and PR workflows
+
+---
+
+## Phase 6 - Improve deployment images
+
+Start when:
+
+- [ ] Phase 4 is complete
+
+Done when:
+
+- [ ] A first-party full image or equivalent plan exists
+- [ ] The repo has a reference `docker-compose.yml`
+- [ ] Server deployments can inject config without a mounted file
+- [ ] Resource guidance exists for common workloads
+- [ ] Git and GitHub workflows run inside the supported image shape
+
+Focus files:
+
+- `Dockerfile`
+- `docker/docker-compose.yml`
+- `packages/opencode/src/config/config.ts`
+- `packages/web/src/content/docs/web.mdx`
+- `packages/web/src/content/docs/troubleshooting.mdx`
+
+Todo:
+
+- [ ] Add or plan a Debian-based full image that includes git, ripgrep, fd, curl, jq, and common build tools
+- [ ] Remove or reduce the need to copy musl libraries into Debian-based runtime images
+- [ ] Decide whether Playwright and test tooling ship as companion images or documented build stages
+- [ ] Add a reference `docker/docker-compose.yml` with sane defaults for volumes, XDG env vars, git safe directory setup, user creation, and the `doas` shim
+- [ ] Support `OPENCODE_CONFIG_CONTENT` as a first-class config injection path for server deployments
+- [ ] Document recommended `shm_size`, `pids_limit`, and `mem_limit` values for common workload sizes
+- [ ] Verify git and `gh` workflows inside the supported deployment shape
+
+---
+
+## Phase 7 - Finish docs, migration, and hardening
+
+Start when:
+
+- [ ] Phases 1 through 6 are complete or have explicit deferrals
+
+Done when:
+
+- [ ] Docs explain the new settings, workspace, git, GitHub, and deployment behavior
+- [ ] Migration and recovery guidance is complete
+- [ ] Logging and troubleshooting cover the new failure modes
+- [ ] Web and desktop behavior is verified or intentionally documented as different
+- [ ] OpenAPI and SDK compatibility is verified after all route changes
+
+Focus files:
+
+- `packages/web/src/content/docs/web.mdx`
+- `packages/web/src/content/docs/github.mdx`
+- `packages/web/src/content/docs/troubleshooting.mdx`
+- `packages/app/e2e/settings/settings.spec.ts`
+- `packages/app/e2e/projects/workspace-new-session.spec.ts`
+- `packages/app/e2e/fixtures.ts`
+- `packages/app/e2e/actions.ts`
+
+Todo:
+
+- [ ] Update docs that still describe browser-only persistence
+- [ ] Add migration notes for what moved server-side and how users recover from bad local or server state
+- [ ] Add migration notes for the new worktree location and naming rules
+- [ ] Add GitHub setup and failure guidance for missing `gh`, missing auth, and remote misconfiguration
+- [ ] Add operator guidance for reset and recovery commands
+- [ ] Add logging and observability for settings sync failures and git command failures
+- [ ] Verify multi-project isolation and workspace path behavior
+- [ ] Verify offline or degraded-server behavior where it applies
+- [ ] Verify web and desktop parity, or document the intentional differences
+- [ ] Verify OpenAPI and SDK compatibility after the final route surface lands
+- [ ] Move any unfinished scope into explicit follow-up checkboxes instead of leaving it implicit
+
+---
+
+## Find files
 
 <details>
 <summary>Server / API / OpenAPI</summary>
@@ -304,9 +578,9 @@ Add a history view (commit list, details, changed files, per-file diff). Integra
 <details>
 <summary>Docker / deployment</summary>
 
-- `Dockerfile` (current Alpine-based image)
-- `docker/docker-compose.yml` (to be created — reference compose file)
-- `packages/opencode/src/config/config.ts` (OPENCODE_CONFIG_CONTENT handling)
+- `Dockerfile`
+- `docker/docker-compose.yml`
+- `packages/opencode/src/config/config.ts`
 </details>
 
 <details>
@@ -319,14 +593,5 @@ Add a history view (commit list, details, changed files, per-file diff). Integra
 - `packages/opencode/test/project/worktree-remove.test.ts`
 - `packages/web/src/content/docs/web.mdx`
 - `packages/web/src/content/docs/github.mdx`
-- `packages/web/src/content/docs/troubleshooting.mdx` (and locale variants)
+- `packages/web/src/content/docs/troubleshooting.mdx`
 </details>
-
----
-
-## Status
-
-- Completed architecture and code-path reconnaissance for all feature areas
-- No code modified yet
-- No migrations/builds/tests run yet
-- **Next step**: begin Phase 1 (server-backed settings)
