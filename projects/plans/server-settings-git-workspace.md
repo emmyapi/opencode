@@ -1,6 +1,6 @@
 # Workspace rollout
 
-Phase server settings and git-powered workflows
+Phase server settings and manual VS Code-like git workflows in the web UI
 
 ---
 
@@ -16,20 +16,22 @@ Phase server settings and git-powered workflows
 
 ## Track phases
 
-- [ ] Phase 0 - Lock decisions
+- [x] Phase 0 - Lock decisions
 - [ ] Phase 1 - Move settings to the server
 - [ ] Phase 2 - Create workspaces as git worktrees
-- [ ] Phase 3 - Add core git APIs
-- [ ] Phase 4 - Add GitHub PR integration
-- [ ] Phase 5 - Ship source control UI
+- [ ] Phase 3 - Add core git APIs for the web UI
+- [ ] Phase 4 - Add GitHub publish and PR integration
+- [ ] Phase 5 - Ship VS Code-like source control UI
 - [ ] Phase 6 - Improve deployment images
 - [ ] Phase 7 - Finish docs, migration, and hardening
 
 Current state:
 
 - Recon is complete across settings, workspaces, git, GitHub, and deployment
+- Git and GitHub scope is a manual, user-invoked source control flow in the opencode web UI, similar to VS Code, not background automation
 - No code has been modified yet
 - No builds, migrations, or tests have been run yet
+- Phase 0 decisions are locked in this plan before any code work starts
 
 ---
 
@@ -70,15 +72,15 @@ Current state:
 
 - **Git coverage today**
   - Existing coverage includes `project.initGit`, `vcs.get`, and `file.status`
-  - Missing coverage includes history, stage or reset flows, commit, sync, merge or rebase, and PR flows
-  - The app still has no dedicated source control panel
+  - Missing coverage includes the manual web UI flows users expect from VS Code: history, stage or reset flows, pull, commit, merge or rebase, push or publish, and PR flows
+  - The app still has no dedicated source control panel for those workflows
 
 - **Deployment pain points**
   - Web deployment relies on a custom multi-stage image to layer OpenCode onto another base image
   - Alpine and musl binaries require manual copying into Debian-based images today
   - Git safe directory setup, user setup, and the `doas` shim are repeated in each deployment
   - There is no first-party full image with common dev tooling preinstalled
-  - Make sure playwright can run e2e tests for all browser types (chromium, firefox, safari). 
+  - Make sure playwright can run e2e tests for all browser types (chromium, firefox, safari).
   - Notice that playwright was not necesarily in a working state in the reference docker-compose.yml
 
 <details>
@@ -162,25 +164,47 @@ services:
 
 Start when:
 
-- [ ] Notes above still match the repo
+- [x] Notes above still match the repo
 
 Done when:
 
-- [ ] Workspace naming is locked
-- [ ] Server settings scope is locked
-- [ ] GitHub auth model is locked
-- [ ] Branch naming default is locked
-- [ ] Rejected alternatives are written down here
+- [x] Workspace naming is locked
+- [x] Server settings scope is locked
+- [x] GitHub auth model is locked
+- [x] Branch naming default is locked
+- [x] Rejected alternatives are written down here
 
 Todo:
 
-- [ ] Confirm the workspace naming format as `<repoFolder>__<promptSlug>`
-- [ ] Confirm collision handling with `-2`, `-3`, and later suffixes
-- [ ] Confirm whether server-backed settings include all current local persisted state, including transient UI state
-- [ ] Confirm whether theme first paint should use server bootstrap only or keep a minimal local cache
-- [ ] Confirm whether GitHub auth should reuse local `gh` through the server or move to stored OAuth or token state
-- [ ] Confirm whether new worktrees should keep the branch default `opencode/<name>`
-- [ ] Write the final answers and rejected alternatives into this phase before starting Phase 1
+- [x] Confirm the workspace naming format as `<repoFolder>__<promptSlug>`
+- [x] Confirm collision handling with `-2`, `-3`, and later suffixes
+- [x] Confirm whether server-backed settings include all current local persisted state, including transient UI state
+- [x] Confirm whether theme first paint should use server bootstrap only or keep a minimal local cache
+- [x] Confirm whether GitHub auth for manual web UI publish and PR flows should reuse local `gh` through the server or move to stored OAuth or token state
+- [x] Confirm whether new worktrees should keep the branch default `opencode/<name>`
+- [x] Write the final answers and rejected alternatives into this phase before starting Phase 1
+
+Locked answers:
+
+- Server state is single-user and global per server instance
+- All persisted state becomes server-backed, including transient UI state, machine-specific preferences, and every existing browser or desktop persisted key
+- First paint uses the built-in default theme until server settings load, with no local theme cache and no local settings source of truth
+- New worktrees are created beside the repo as `<repoFolder>__<promptSlug>` so the repo and the worktree sit at the same directory level
+- Collisions append deterministic numeric suffixes to the final resolved name: `-2`, `-3`, and later
+- The final resolved name is reused for the workspace name, worktree slug, directory name, and git branch name
+- Git branches use the resolved name directly, with no `opencode/` prefix
+- Git and GitHub actions stay manual and user-invoked in the opencode web UI, similar to VS Code source control, rather than automatic background sync
+- GitHub integration uses server-stored SSH credentials for manual git remote operations and a server-stored GitHub API credential for publish, PR, and repo metadata flows
+- Synced client state lives behind a dedicated route namespace, not the existing `/global/config` or `/config` routes, with `/global/state` and `/state` as the default shape
+
+Rejected alternatives:
+
+- Sync only durable preferences and leave transient UI state local
+- Keep a minimal local theme cache for first paint
+- Reuse local `gh` auth instead of first-party server credential storage
+- Keep creating worktrees under `Global.Path.data`
+- Keep the `opencode/<name>` branch prefix
+- Reuse the existing config routes for synced client state
 
 ---
 
@@ -188,16 +212,17 @@ Todo:
 
 Start when:
 
-- [ ] Phase 0 is complete
+- [x] Phase 0 is complete
 
 Done when:
 
 - [ ] A versioned server settings contract exists
 - [ ] OpenAPI and SDK support the new settings routes
-- [ ] App settings read and write through a server sync layer
-- [ ] Existing local data migrates once and stops writing to old keys
-- [ ] Theme preload behavior still avoids a bad first paint
-- [ ] Tests cover storage, migration, and bootstrap behavior
+- [ ] All previously local persisted state reads and writes through a server sync layer
+- [ ] No persisted setting remains local-only after migration
+- [ ] Existing browser and desktop local data migrates once and stops writing to old keys
+- [ ] First paint uses the built-in default theme until server settings load
+- [ ] Tests cover storage, migration, bootstrap behavior, and fresh-client state restore
 
 Focus files:
 
@@ -214,29 +239,40 @@ Focus files:
 - `packages/app/src/context/server.tsx`
 - `packages/app/src/context/global-sync.tsx`
 - `packages/app/src/context/global-sync/bootstrap.ts`
+- `packages/app/src/context/layout.tsx`
+- `packages/app/src/context/language.tsx`
+- `packages/app/src/context/models.tsx`
+- `packages/app/src/context/permission.tsx`
+- `packages/app/src/context/notification.tsx`
+- `packages/app/src/context/prompt.tsx`
+- `packages/app/src/context/comments.tsx`
+- `packages/app/src/context/terminal.tsx`
+- `packages/app/src/context/file/view-cache.ts`
+- `packages/app/src/context/highlights.tsx`
 - `packages/app/src/context/global-sdk.tsx`
 - `packages/app/src/context/sdk.tsx`
 - `packages/app/src/utils/server.ts`
 - `packages/app/src/entry.tsx`
+- `packages/app/src/components/prompt-input.tsx`
 - `packages/ui/src/theme/context.tsx`
 - `packages/app/public/oc-theme-preload.js`
 - `packages/desktop/src/index.tsx`
 
 Todo:
 
-- [ ] Inventory every persisted key in `packages/app`, `packages/ui`, and desktop, then map each one to global, project, workspace, or session scope
-- [ ] Define a canonical versioned payload for server-backed settings, including validation rules and migration metadata
-- [ ] Decide whether settings live behind existing config routes or a new route namespace, then document that choice in code comments or route docs
+- [ ] Inventory every persisted key in `packages/app`, `packages/ui`, and desktop, then map each one to global, project, workspace, or session scope in the server contract
+- [ ] Define a canonical versioned payload for all server-backed state, including transient UI state, histories, drafts, machine-specific preferences, and migration metadata
+- [x] Use a dedicated route namespace for synced client state instead of existing config routes, and document `/global/state` plus `/state` in code comments or route docs
 - [ ] Add read, write, and patch endpoints in the server route layer
 - [ ] Expose the new routes through `Server.openapi()` and the generate command
 - [ ] Regenerate OpenAPI and the JS SDK
-- [ ] Add or adapt the app-side sync store that will replace direct browser persistence
+- [ ] Add or adapt the app-side sync store that will replace direct browser and desktop persistence as the source of truth
 - [ ] Move settings contexts to the new server sync layer first
-- [ ] Migrate layout, language, keybinds, project lists, and other persisted app state after settings land
-- [ ] Replace direct `localStorage` reads in app bootstrap and theme preload paths
-- [ ] Add a one-time migration that reads old local values, uploads them, and marks the migration complete
-- [ ] Decide how desktop reuses the same contract or a compatibility shim, then record that choice before leaving this phase
-- [ ] Add backend, app, and e2e coverage for settings reads, writes, migration, and first-paint theme behavior
+- [ ] Migrate layout, language, keybinds, server lists, permission state, notification state, prompt history, drafts, terminal state, file view state, project metadata, and other persisted app state after settings land
+- [ ] Replace direct `localStorage` reads in app bootstrap and theme preload paths with built-in defaults plus server bootstrap
+- [ ] Add a one-time migration that reads old browser and desktop local values, uploads them, and marks the migration complete
+- [ ] Keep desktop on the same single-user server contract instead of a separate compatibility shim
+- [ ] Add backend, app, and e2e coverage for settings reads, writes, migration, first-paint theme behavior, and full-state restore on a fresh client
 - [ ] Record reset and recovery behavior for the docs phase
 
 ---
@@ -251,6 +287,7 @@ Done when:
 
 - [ ] New workspaces are created beside the project root
 - [ ] Naming is deterministic and collision-safe
+- [ ] The final resolved name is reused for the workspace name, directory name, and branch name
 - [ ] The app prompts for a name and shows the final path before creation
 - [ ] Workspace APIs return the new path and metadata
 - [ ] Conflict states have clear remediation
@@ -280,7 +317,8 @@ Todo:
 - [ ] Build the final path as `<projectParent>/<repoFolder>__<promptSlug>`
 - [ ] Implement slugging and validation for the prompted workspace name
 - [ ] Add collision handling with `-2`, `-3`, and later suffixes
-- [ ] Keep or explicitly change the branch strategy for `opencode/<name>`
+- [ ] Use one prompted name for the workspace label, worktree slug, directory name, and branch name
+- [ ] Use the final resolved name directly as the git branch name, with no `opencode/` prefix
 - [ ] Detect existing directory, existing branch, dirty repo, detached HEAD, and missing git state before creation
 - [ ] Return friendly remediation messages for each blocked state
 - [ ] Update control-plane and experimental workspace APIs to return the new absolute path and worktree metadata
@@ -291,7 +329,7 @@ Todo:
 
 ---
 
-## Phase 3 - Add core git APIs
+## Phase 3 - Add core git APIs for the web UI
 
 Start when:
 
@@ -299,7 +337,7 @@ Start when:
 
 Done when:
 
-- [ ] Backend APIs cover status, staging, commit, sync, branches, and history
+- [ ] Backend APIs cover the manual source control flows the web UI needs for status, staging, discard, commit, pull, push, merge, rebase, branches, and history
 - [ ] Route handlers stay thin and shared git logic lives in project or util layers
 - [ ] Error responses are normalized for UI use
 - [ ] OpenAPI and SDK include the new VCS surface
@@ -322,22 +360,22 @@ Focus files:
 
 Todo:
 
-- [ ] Define the normalized error model for auth failures, merge conflicts, non-fast-forward pushes, missing upstream, and unsupported repo states
+- [ ] Define the normalized error model for auth failures, merge or rebase conflicts, non-fast-forward pushes, missing upstream, and unsupported repo states
 - [ ] Add status endpoints that return staged, unstaged, untracked, and conflicted files
 - [ ] Add file-level stage, unstage, and discard endpoints
 - [ ] Explicitly defer hunk-level actions until file-level flows are stable
 - [ ] Add commit support with message handling and any allowed options
-- [ ] Add fetch, pull, push, and sync endpoints with clear result states
-- [ ] Add branch create, switch, and delete endpoints
-- [ ] Add history, commit detail, and file diff endpoints
+- [ ] Add fetch, pull, push, publish, and sync endpoints with clear result states
+- [ ] Add branch create, switch, delete, and upstream tracking endpoints
+- [ ] Add merge and rebase endpoints, plus history, commit detail, and file diff endpoints
 - [ ] Keep route handlers thin and move shared git behavior into `project/vcs.ts` and `util/git.ts`
 - [ ] Regenerate OpenAPI and the JS SDK
-- [ ] Wire the app data layer to the new VCS surface without building the full source control panel yet
+- [ ] Wire the app data layer to the new VCS surface needed for a VS Code-like manual source control panel without building the full panel yet
 - [ ] Add backend coverage for command behavior and error mapping
 
 ---
 
-## Phase 4 - Add GitHub PR integration
+## Phase 4 - Add GitHub publish and PR integration
 
 Start when:
 
@@ -346,16 +384,18 @@ Start when:
 
 Done when:
 
-- [ ] The server can report `gh` availability and auth status
-- [ ] The server can create, list, and open PRs
-- [ ] The app can publish a branch and start PR creation from current repo state
-- [ ] Missing auth or missing `gh` surfaces as actionable guidance
+- [ ] The server can report GitHub credential status and repo readiness for manual publish and PR actions
+- [ ] The server can create, list, and open PRs without relying on local `gh`
+- [ ] The app can let the user manually publish a branch and start PR creation from current repo state
+- [ ] Missing GitHub credentials or remote metadata surfaces as actionable guidance
 - [ ] Tests cover the main failure modes
 
 Focus files:
 
 - `packages/opencode/src/server/server.ts`
+- `packages/opencode/src/server/routes/global.ts`
 - `packages/opencode/src/server/routes/project.ts`
+- `packages/opencode/src/auth/index.ts`
 - `packages/opencode/src/project/vcs.ts`
 - `packages/opencode/src/util/git.ts`
 - `packages/sdk/js/script/build.ts`
@@ -366,19 +406,20 @@ Focus files:
 
 Todo:
 
-- [ ] Add endpoints that report whether `gh` is installed and whether the current user is authenticated
+- [ ] Add secure server-side storage and rotation flows for the single global GitHub SSH credential and GitHub API credential
+- [ ] Add endpoints that report whether the required GitHub credentials are present and whether the current repo can publish or open PRs from the web UI
 - [ ] Add endpoints for repo remotes, detected default base branch, branch publish state, and upstream status
-- [ ] Add PR create, list, and open endpoints
+- [ ] Add PR create, list, and open endpoints backed by the stored GitHub API credential
 - [ ] Decide whether checks or status data should land in this phase or remain a follow-up item, then write that choice here
-- [ ] Normalize missing `gh`, missing auth, missing remote, and unsupported repo states into actionable responses
-- [ ] Connect Phase 3 branch and upstream state to a publish branch flow in the app
-- [ ] Add a create PR flow that starts from the current branch and selected base branch
-- [ ] Add tests around common failure modes and auth guidance
-- [ ] Record container and runtime requirements for `gh` so Phase 6 can include them
+- [ ] Normalize missing SSH credentials, missing GitHub API credentials, missing remote, and unsupported repo states into actionable responses
+- [ ] Connect Phase 3 branch and upstream state to a manual publish branch flow in the app
+- [ ] Add a create PR flow that starts from the current branch and selected base branch after the user chooses to publish or open a PR
+- [ ] Add tests around common failure modes and credential guidance
+- [ ] Record container and runtime requirements for manual web UI pull, push, publish, and PR flows so Phase 6 can include them
 
 ---
 
-## Phase 5 - Ship source control UI
+## Phase 5 - Ship VS Code-like source control UI
 
 Start when:
 
@@ -387,11 +428,11 @@ Start when:
 
 Done when:
 
-- [ ] The app has a dedicated source control panel
-- [ ] Users can stage, unstage, discard, commit, sync, and switch branches from the UI
-- [ ] Users can inspect commit history and diffs
-- [ ] Merge and rebase states are guided instead of opaque
-- [ ] The app can offer PR creation after push when appropriate
+- [ ] The app has a dedicated source control panel in the web UI
+- [ ] Users can manually pull, stage, unstage, discard, commit, merge, rebase, publish, push, sync, and switch branches from the UI
+- [ ] Users can inspect branches, commit history, and diffs
+- [ ] Merge and rebase states are guided instead of opaque, with clear continue or abort paths
+- [ ] The app can offer manual PR creation after push when appropriate, similar to VS Code
 - [ ] E2E coverage covers the main happy paths and key failure paths
 
 Focus files:
@@ -412,12 +453,12 @@ Todo:
 - [ ] Add grouped file change lists for staged, unstaged, untracked, and conflicted files
 - [ ] Add quick actions for stage, unstage, and discard
 - [ ] Add a commit input and commit action wired to the Phase 3 API
-- [ ] Add sync, push, and pull controls with ahead, behind, and conflict status
-- [ ] Add branch display plus create and switch actions
+- [ ] Add pull, fetch, sync, publish, and push controls with ahead, behind, upstream, and conflict status
+- [ ] Add branch display plus create, switch, and merge target actions
 - [ ] Add a history view with commit list, commit detail, changed files, and per-file diffs
-- [ ] Add guided merge and rebase UX with explicit conflict states
+- [ ] Add guided merge and rebase UX with explicit conflict states plus continue and abort actions
 - [ ] Add a post-push PR prompt when the branch is ahead and no PR exists
-- [ ] Add e2e coverage for primary git and PR workflows
+- [ ] Add e2e coverage for primary manual git and PR workflows in the web UI
 
 ---
 
@@ -433,7 +474,7 @@ Done when:
 - [ ] The repo has a reference `docker-compose.yml`
 - [ ] Server deployments can inject config without a mounted file
 - [ ] Resource guidance exists for common workloads
-- [ ] Git and GitHub workflows run inside the supported image shape
+- [ ] Manual git and GitHub workflows from the web UI run inside the supported image shape
 
 Focus files:
 
@@ -445,13 +486,13 @@ Focus files:
 
 Todo:
 
-- [ ] Add or plan a Debian-based full image that includes git, ripgrep, fd, curl, jq, and common build tools
+- [ ] Add or plan a Debian-based full image that includes git, `openssh-client`, ripgrep, fd, curl, jq, and common build tools
 - [ ] Remove or reduce the need to copy musl libraries into Debian-based runtime images
 - [ ] Decide whether Playwright and test tooling ship as companion images or documented build stages
 - [ ] Add a reference `docker/docker-compose.yml` with sane defaults for volumes, XDG env vars, git safe directory setup, user creation, and the `doas` shim
 - [ ] Support `OPENCODE_CONFIG_CONTENT` as a first-class config injection path for server deployments
 - [ ] Document recommended `shm_size`, `pids_limit`, and `mem_limit` values for common workload sizes
-- [ ] Verify git and `gh` workflows inside the supported deployment shape
+- [ ] Verify manual web UI git, SSH, and GitHub API workflows inside the supported deployment shape
 
 ---
 
@@ -463,7 +504,7 @@ Start when:
 
 Done when:
 
-- [ ] Docs explain the new settings, workspace, git, GitHub, and deployment behavior
+- [ ] Docs explain the new settings, workspace, manual web UI git and GitHub behavior, and deployment behavior
 - [ ] Migration and recovery guidance is complete
 - [ ] Logging and troubleshooting cover the new failure modes
 - [ ] Web and desktop behavior is verified or intentionally documented as different
@@ -484,9 +525,9 @@ Todo:
 - [ ] Update docs that still describe browser-only persistence
 - [ ] Add migration notes for what moved server-side and how users recover from bad local or server state
 - [ ] Add migration notes for the new worktree location and naming rules
-- [ ] Add GitHub setup and failure guidance for missing `gh`, missing auth, and remote misconfiguration
+- [ ] Add GitHub setup and failure guidance for missing server SSH credentials, missing GitHub API credentials, remote misconfiguration, and manual publish or PR flows
 - [ ] Add operator guidance for reset and recovery commands
-- [ ] Add logging and observability for settings sync failures and git command failures
+- [ ] Add logging and observability for settings sync failures and git or GitHub command failures
 - [ ] Verify multi-project isolation and workspace path behavior
 - [ ] Verify offline or degraded-server behavior where it applies
 - [ ] Verify web and desktop parity, or document the intentional differences
